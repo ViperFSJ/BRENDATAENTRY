@@ -1,0 +1,60 @@
+{
+  "fields": {
+    "serial_no": {
+      "value": "0300297206",
+      "confidence": 0.96,
+      "source_photo_type": "data_plate"
+    },
+    "client_unit_id": {
+      "value": "800383502",
+      "confidence": 0.93,
+      "source_photo_type": "unit_id_decal"
+    },
+    "manufacturer": {
+      "value": "JLG",
+      "confidence": 0.88,
+      "source_photo_type": "data_plate"
+    },
+    "model": {
+      "value": "450AJ",
+      "confidence": 0.90,
+      "source_photo_type": "data_plate"
+    },
+    "client_name": {
+      "value": "Herc Rentals",
+      "confidence": 0.86,
+      "source_photo_type": "owner_label"
+    },
+    "owner_name": {
+      "value": "Herc Rentals",
+      "confidence": 0.74,
+      "source_photo_type": "owner_label"
+    },
+    "equip_type": {
+      "value": "Telescopic Boom Lift",
+      "confidence": 0.92,
+      "source_photo_type": "full_unit"
+    },
+    "province": {
+      "value": "AB",
+      "confidence": 0.78,
+      "source_photo_type": "location_signage"
+    },
+    "capacity": {
+      "value": "500 lbs",
+      "confidence": 0.82,
+      "source_photo_type": "data_plate"
+    },
+    "client_reference": {
+      "value": "-",
+      "confidence": 0.70,
+      "source_photo_type": "data_plate"
+    },
+    "lsd": {
+      "value": "LSD",
+      "confidence": 0.62,
+      "source_photo_type": "data_plate"
+    }
+  }
+}
+

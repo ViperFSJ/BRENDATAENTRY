@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.python-version
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SQLite DBs (created at runtime)
+*.sqlite
+*.sqlite3
+
+# Generated output / test runs
+desktop_output/
+demo_output/
+__session_out__/
+__photo_first_out__/
+__low_conf_out__/
+__validation_out__/
+__rule_test_out__/
+__photo_embed_fix_out__/
+__test_history__/
+__demo_output*/
+__demo_intake*.sqlite
+
+# Loose test artifacts in repo root
+__test_*.docx
+
+# Vendored deps (optional scripts use pip; see requirements.txt)
+.pydeps/
+
+# One-off client files in repo root (not required for trials)
+/*.pdf
+/*.xlsx
+/*.png
