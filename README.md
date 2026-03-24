@@ -16,6 +16,8 @@ Optional: `--force-new-equipment` for repeated tests without “same equipment?�
 
 **Full step-by-step for clients:** [docs/desktop_ui_trial_guide.md](docs/desktop_ui_trial_guide.md)
 
+**Live demo before client/class are known:** [docs/live_demo_prep.md](docs/live_demo_prep.md) — use `samples/live_trial_manual_extraction.json` for all-manual prompts.
+
 ## CLI demo (photo-first)
 
 ```bash

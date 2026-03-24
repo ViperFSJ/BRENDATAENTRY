@@ -1,0 +1,4 @@
+{
+  "comment": "Empty OCR payload: technician enters everything via prompts. Use for live demos when class/client/equipment are unknown in advance. Point desktop UI or run_intake_demo --extraction-json at this file.",
+  "fields": {}
+}
