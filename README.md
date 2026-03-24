@@ -18,6 +18,8 @@ Optional: `--force-new-equipment` for repeated tests without “same equipment?�
 
 **Live demo before client/class are known:** [docs/live_demo_prep.md](docs/live_demo_prep.md) — use `samples/live_trial_manual_extraction.json` for all-manual prompts.
 
+**What to say during a client demo:** [docs/live_demo_narration_script.md](docs/live_demo_narration_script.md)
+
 ## CLI demo (photo-first)
 
 ```bash
