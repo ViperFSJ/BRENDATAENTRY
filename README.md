@@ -2,6 +2,8 @@
 
 Offline-first workflow: OCR-style field JSON → technician prompts → filled checklist & certificate Word documents, SQLite persistence, RAEQ assignment.
 
+**Send your client:** [docs/CLIENT_GETTING_STARTED.md](docs/CLIENT_GETTING_STARTED.md) — download (ZIP or clone), Python, run desktop app.
+
 ## Quick trial (desktop UI)
 
 1. Install **Python 3.9+** (with **Tkinter** — included with [python.org](https://www.python.org/downloads/) builds).
