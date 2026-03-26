@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from .photo_extraction import ExtractionResult
 from .session_pipeline import (
     PhotoFirstSessionInput,
     SessionResult,
+    StatusChoice,
     run_photo_first_session,
 )
 
@@ -13,6 +14,13 @@ from .session_pipeline import (
 ConfirmExistingCallback = Callable[[Dict[str, str]], bool]
 ResolveMissingFieldCallback = Callable[[str, str], str]
 ChecklistResultsProvider = Callable
+StatusChoiceCallback = Callable[[List["UIStatusChoice"]], str]
+
+
+@dataclass(frozen=True)
+class UIStatusChoice:
+    label: str
+    is_default: bool = False
 
 
 @dataclass
@@ -47,7 +55,15 @@ class SessionService:
         confirm_existing_callback: ConfirmExistingCallback,
         resolve_missing_field_callback: ResolveMissingFieldCallback,
         checklist_results_provider: Optional[ChecklistResultsProvider] = None,
+        status_choice_callback: Optional[StatusChoiceCallback] = None,
     ) -> SessionResult:
+        pipeline_status_callback = None
+        if status_choice_callback is not None:
+            def pipeline_status_callback(choices: List[StatusChoice]) -> str:
+                return status_choice_callback(
+                    [UIStatusChoice(label=c.label, is_default=c.is_default) for c in choices]
+                )
+
         return run_photo_first_session(
             db_path=self.db_path,
             templates_root=self.templates_root,
@@ -64,5 +80,6 @@ class SessionService:
             confirm_existing_callback=confirm_existing_callback,
             resolve_missing_field_callback=resolve_missing_field_callback,
             checklist_results_provider=checklist_results_provider,
+            status_choice_callback=pipeline_status_callback,
             history_root=self.history_root,
         )

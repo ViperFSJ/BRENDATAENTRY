@@ -71,6 +71,15 @@ def _find_placeholder_text_in_any(elem: ET.Element, w_ns: str) -> Optional[str]:
 
 
 def _set_sdt_text_value(sdt_elem: ET.Element, w_ns: str, value_text: str) -> None:
+    def _set_run_black(run_elem: ET.Element) -> None:
+        rpr = run_elem.find(_w(w_ns, "rPr"))
+        if rpr is None:
+            rpr = ET.SubElement(run_elem, _w(w_ns, "rPr"))
+        color = rpr.find(_w(w_ns, "color"))
+        if color is None:
+            color = ET.SubElement(rpr, _w(w_ns, "color"))
+        color.set(_w(w_ns, "val"), "000000")
+
     # Replace the first non-empty w:t inside sdtContent, or insert a new one.
     t_nodes = [t for t in sdt_elem.iter(_w(w_ns, "t")) if (t.text is not None and t.text.strip() != "")]
     if not t_nodes:
@@ -84,13 +93,18 @@ def _set_sdt_text_value(sdt_elem: ET.Element, w_ns: str, value_text: str) -> Non
             raise ValueError("Could not locate sdtContent to write value.")
         p = ET.SubElement(sdt_content, _w(w_ns, "p"))
         r = ET.SubElement(p, _w(w_ns, "r"))
+        _set_run_black(r)
         t = ET.SubElement(r, _w(w_ns, "t"))
         t.text = value_text
         return
 
     # Replace all non-empty w:t nodes to be safe (some templates split runs).
+    parent_map = {c: p for p in sdt_elem.iter() for c in p}
     for t in t_nodes:
         t.text = value_text
+        run = parent_map.get(t)
+        if run is not None:
+            _set_run_black(run)
 
 
 def _set_sdt_date_value(sdt_elem: ET.Element, w_ns: str, dt: datetime, placeholder_text: str) -> None:
@@ -108,16 +122,30 @@ def _set_sdt_date_value(sdt_elem: ET.Element, w_ns: str, dt: datetime, placehold
 
 
 def _set_tc_text_value(tc_elem: ET.Element, w_ns: str, value_text: str) -> None:
+    def _set_run_black(run_elem: ET.Element) -> None:
+        rpr = run_elem.find(_w(w_ns, "rPr"))
+        if rpr is None:
+            rpr = ET.SubElement(run_elem, _w(w_ns, "rPr"))
+        color = rpr.find(_w(w_ns, "color"))
+        if color is None:
+            color = ET.SubElement(rpr, _w(w_ns, "color"))
+        color.set(_w(w_ns, "val"), "000000")
+
     # Replace all non-empty w:t nodes in the cell.
     t_nodes = [t for t in tc_elem.iter(_w(w_ns, "t")) if t.text is not None and t.text.strip() != ""]
     if not t_nodes:
         # Insert minimal paragraph/run/text.
         p = ET.SubElement(tc_elem, _w(w_ns, "p"))
         r = ET.SubElement(p, _w(w_ns, "r"))
+        _set_run_black(r)
         t = ET.SubElement(r, _w(w_ns, "t"))
         t.text = value_text
         return
+    parent_map = {c: p for p in tc_elem.iter() for c in p}
     t_nodes[0].text = value_text
+    run = parent_map.get(t_nodes[0])
+    if run is not None:
+        _set_run_black(run)
     for t in t_nodes[1:]:
         t.text = ""
 

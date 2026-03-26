@@ -2,6 +2,7 @@ import os
 import re
 import zipfile
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 from typing import Sequence, Union
@@ -87,6 +88,27 @@ def insert_photos_into_checklist_figures(
     # Determine image relationship type (constant for Office image rels).
     image_rel_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 
+    def next_available_rid(base: str) -> str:
+        rid = base
+        k_local = 1
+        while rid in existing_ids:
+            k_local += 1
+            rid = f"{base}_{k_local}"
+        existing_ids.add(rid)
+        return rid
+
+    def append_rel_for_media(media_part_name: str, rid_base: str) -> str:
+        rid_new = next_available_rid(rid_base)
+        rel_tag = f"{{{rel_ns}}}Relationship" if rel_ns else "Relationship"
+        rel_elem = ET.SubElement(rels_root, rel_tag)
+        rel_elem.set("Id", rid_new)
+        rel_elem.set("Type", image_rel_type)
+        rel_elem.set("Target", f"media/{Path(media_part_name).name}")
+        return rid_new
+
+    parent_map = {c: p for p in doc_root.iter() for c in p}
+    body = next((e for e in doc_root.iter() if local(e.tag) == "body"), None)
+
     inserted = 0
     # First image can reuse first existing rel/media target of first blip.
     # Additional images get new rels + media files.
@@ -116,24 +138,34 @@ def insert_photos_into_checklist_figures(
         ext = photo.suffix.lower().lstrip(".") or "png"
         media_name = f"word/media/figure_auto_{i+1}.{ext}"
         file_data[media_name] = photo.read_bytes()
-
-        # New relationship id
-        rid = f"rIdAutoPhoto{i+1}"
-        k = 1
-        while rid in existing_ids:
-            k += 1
-            rid = f"rIdAutoPhoto{i+1}_{k}"
-        existing_ids.add(rid)
-
-        rel_tag = f"{{{rel_ns}}}Relationship" if rel_ns else "Relationship"
-        rel_elem = ET.SubElement(rels_root, rel_tag)
-        rel_elem.set("Id", rid)
-        rel_elem.set("Type", image_rel_type)
-        rel_elem.set("Target", f"media/{Path(media_name).name}")
+        rid = append_rel_for_media(media_name, f"rIdAutoPhoto{i+1}")
 
         # Point this blip to new rel id.
         blip.attrib[embed_attr_key] = rid
         inserted += 1
+
+    # Expand document if more photos were provided than existing placeholders.
+    if len(photos) > len(blips) and body is not None:
+        extras = photos[len(blips) :]
+        last_blip = blips[-1]
+        p_cursor = last_blip
+        while p_cursor is not None and local(p_cursor.tag) != "p":
+            p_cursor = parent_map.get(p_cursor)
+        if p_cursor is not None:
+            for idx, photo in enumerate(extras, start=1):
+                if not photo.exists():
+                    continue
+                ext = photo.suffix.lower().lstrip(".") or "png"
+                media_name = f"word/media/figure_auto_extra_{idx}.{ext}"
+                file_data[media_name] = photo.read_bytes()
+                rid = append_rel_for_media(media_name, f"rIdAutoPhotoExtra{idx}")
+                new_p = deepcopy(p_cursor)
+                new_blip = next((e for e in new_p.iter() if local(e.tag) == "blip"), None)
+                if new_blip is None:
+                    continue
+                new_blip.attrib[embed_attr_key] = rid
+                body.append(new_p)
+                inserted += 1
 
     # Serialize updated XMLs
     file_data[doc_xml_name] = ET.tostring(doc_root, encoding="utf-8", xml_declaration=True)

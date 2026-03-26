@@ -86,15 +86,18 @@ A window titled **“NDE Inspection — Desktop Intake”** should open.
 
 1. Choose **Equipment class** from the **dropdown** (do not type the class name).
 2. Set **Inspection date** and **Expiry date** if needed.
-3. For a **fully manual** trial (no OCR file yet), set **Extraction JSON** to:
+3. Optional: **Add photos…** to attach images.
+4. If photos are added, the app attempts live extraction from those photos for this session.
+5. If live extraction fails, the app falls back to **full manual field entry** prompts.
+6. If no photos are added, the app uses **full manual field entry** prompts.
+7. Click **Run inspection** and answer the pop-up dialogs (job, location, province, checklist, etc.).
+8. When finished, your outputs are under **`desktop_output`** inside the project folder, organized by class and **RAEQ** number.
 
-   `samples/live_trial_manual_extraction.json`  
+### Live extraction requirement (optional)
 
-   (Use **Browse…** if it is not already filled in.)
-
-4. Optional: **Add photos…** to attach images; then click **Run inspection**.
-5. Answer the pop-up dialogs (job, location, province, checklist, etc.).
-6. When finished, your outputs are under **`desktop_output`** inside the project folder, organized by class and **RAEQ** number.
+- Live extraction uses local `tesseract` OCR when installed.
+- macOS install example: `brew install tesseract`
+- If `tesseract` is not installed, the app prompts for manual field entry.
 
 ---
 

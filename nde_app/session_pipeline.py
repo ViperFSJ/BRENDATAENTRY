@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from .checklist_ui import prompt_checklist_results_cli
 from .checklist_photo_embed import insert_photos_into_checklist_figures
@@ -8,7 +8,11 @@ from .checklist_xml import extract_checklist_items_for_class
 from .template_paths import find_certificate_template, find_checklist_template
 from .db import init_db, save_checklist_results
 from .docx_fill_certificate import fill_certificate_dotx
-from .docx_fill_checklist import fill_checklist_results_in_dotx
+from .docx_fill_checklist import (
+    fill_checklist_results_in_dotx,
+    read_status_choices_from_template,
+    template_has_basket_section,
+)
 from .photo_extraction import (
     PHOTO_EXTRACTION_RULES,
     ExtractionResult,
@@ -74,6 +78,32 @@ class PhotoFirstSessionInput:
     photo_paths: Optional[list] = None
 
 
+@dataclass(frozen=True)
+class StatusChoice:
+    label: str
+    is_default: bool = False
+
+
+def _status_choices_for_template(checklist_template: Path) -> List[StatusChoice]:
+    try:
+        choices = read_status_choices_from_template(checklist_template)
+    except Exception:
+        choices = []
+    if choices:
+        return [StatusChoice(label=c["label"], is_default=bool(c.get("is_default"))) for c in choices]
+    return [
+        StatusChoice(label="Requires review", is_default=True),
+        StatusChoice(label="Certification recommended", is_default=False),
+    ]
+
+
+def _class_uses_basket_fields(checklist_template: Path) -> bool:
+    try:
+        return template_has_basket_section(checklist_template)
+    except Exception:
+        return False
+
+
 def run_inspection_session(
     *,
     db_path: Union[str, Path],
@@ -83,6 +113,7 @@ def run_inspection_session(
     confirm_existing_callback: Callable[[Dict[str, str]], bool],
     resolve_missing_field_callback: Optional[Callable[[str, str], str]] = None,
     checklist_results_provider: Optional[Callable] = None,
+    status_choice_callback: Optional[Callable[[List[StatusChoice]], str]] = None,
     history_root: Optional[Union[str, Path]] = None,
 ) -> SessionResult:
     """
@@ -126,24 +157,29 @@ def run_inspection_session(
     else:
         checklist_results = checklist_results_provider(checklist_rows)
 
-    has_rr = any((v or "").strip().upper() == "RR" for v in checklist_results.values())
-    status_value = "Certification recommended"
-    if has_rr:
-        if resolve_missing_field_callback is not None:
-            status_value = (
-                resolve_missing_field_callback(
-                    "status",
-                    "RR items found. Enter Status",
-                ).strip()
-                or "Requires review"
-            )
-        else:
-            status_value = "Requires review"
-
-    # Output paths
+    # Output/template paths
     class_dir = templates_root / session.class_name
     checklist_template = find_checklist_template(class_dir)
     cert_template = find_certificate_template(class_dir)
+
+    has_rr = any((v or "").strip().upper() == "RR" for v in checklist_results.values())
+    status_value = "Certification recommended"
+    if has_rr:
+        status_choices = _status_choices_for_template(checklist_template)
+        default_status = next((c.label for c in status_choices if c.is_default), status_choices[0].label)
+        if status_choice_callback is not None:
+            chosen = (status_choice_callback(status_choices) or "").strip()
+            status_value = chosen or default_status
+        elif resolve_missing_field_callback is not None:
+            manual = (
+                resolve_missing_field_callback(
+                    "status",
+                    f"RR items found. Enter Status (default: {default_status})",
+                ).strip()
+            )
+            status_value = manual or default_status
+        else:
+            status_value = "Requires review"
 
     out_dir = output_root / session.class_name / raeq
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -244,6 +280,7 @@ def run_photo_first_session(
     confirm_existing_callback: Callable[[Dict[str, str]], bool],
     resolve_missing_field_callback: Callable[[str, str], str],
     checklist_results_provider: Optional[Callable] = None,
+    status_choice_callback: Optional[Callable[[List[StatusChoice]], str]] = None,
     history_root: Optional[Union[str, Path]] = None,
 ) -> SessionResult:
     """
@@ -275,6 +312,20 @@ def run_photo_first_session(
     location = location_default or resolve_missing_field_callback("location", "Enter Location")
     province = resolve_missing_field_callback("province", "Enter 2-letter Province (e.g. AB)")
     lsd = resolve_missing_field_callback("lsd", "Enter LSD value")
+    checklist_template = find_checklist_template(Path(templates_root) / class_name)
+    needs_basket = _class_uses_basket_fields(checklist_template)
+
+    basket_max_height = ""
+    basket_max_reach = ""
+    basket_length = ""
+    basket_width = ""
+    basket_height = ""
+    if needs_basket:
+        basket_max_height = resolve("basket_max_height")
+        basket_max_reach = resolve("basket_max_reach")
+        basket_length = resolve("basket_length")
+        basket_width = resolve("basket_width")
+        basket_height = resolve("basket_height")
 
     input_obj = SessionInput(
         technician_id=session.technician_id or "DEFAULT_TECH",
@@ -295,11 +346,11 @@ def run_photo_first_session(
         lsd=lsd,
         photo_paths=session.photo_paths,
         province=province,
-        basket_max_height=resolve("basket_max_height"),
-        basket_max_reach=resolve("basket_max_reach"),
-        basket_length=resolve("basket_length"),
-        basket_width=resolve("basket_width"),
-        basket_height=resolve("basket_height"),
+        basket_max_height=basket_max_height,
+        basket_max_reach=basket_max_reach,
+        basket_length=basket_length,
+        basket_width=basket_width,
+        basket_height=basket_height,
     )
 
     same_ref_ans = resolve_missing_field_callback(
@@ -323,6 +374,7 @@ def run_photo_first_session(
         confirm_existing_callback=confirm_existing_callback,
         resolve_missing_field_callback=resolve_missing_field_callback,
         checklist_results_provider=checklist_results_provider,
+        status_choice_callback=status_choice_callback,
         history_root=history_root,
     )
 

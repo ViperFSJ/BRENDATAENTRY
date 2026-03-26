@@ -7,9 +7,10 @@ Does not modify CLI behavior of scripts/run_intake_demo.py.
 from __future__ import annotations
 
 import argparse
-import json
+import calendar
 import sys
 import tkinter as tk
+from datetime import date, datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Dict, List, Optional
@@ -19,22 +20,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from nde_app.db import init_db
-from nde_app.photo_extraction import ExtractedField, ExtractionResult
+from nde_app.live_photo_extraction import extract_from_photos
+from nde_app.photo_extraction import ExtractionResult
 from nde_app.raeq_assign import add_available_raeqs
 from nde_app.template_paths import list_equipment_class_names
-from nde_app.ui_service import SessionService, UIInspectionRequest
-
-
-def _load_extraction_json(path: Path) -> ExtractionResult:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    fields: Dict[str, ExtractedField] = {}
-    for k, v in raw.get("fields", {}).items():
-        fields[k] = ExtractedField(
-            value=str(v.get("value", "")),
-            confidence=float(v.get("confidence", 0.0)),
-            source_photo_type=str(v.get("source_photo_type", "unknown")),
-        )
-    return ExtractionResult(fields=fields)
+from nde_app.ui_service import SessionService, UIInspectionRequest, UIStatusChoice
 
 
 def _parse_index_list(raw: str, n: int) -> List[int]:
@@ -49,15 +39,100 @@ def _parse_index_list(raw: str, n: int) -> List[int]:
     return out
 
 
+def _parse_ui_date(raw: str) -> date:
+    s = (raw or "").strip()
+    fmts = [
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%Y/%m/%d",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%b %d %Y",
+        "%B %d %Y",
+    ]
+    for fmt in fmts:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            pass
+    return date.today()
+
+
+class DatePickerDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Tk, initial_text: str) -> None:
+        super().__init__(parent)
+        self.title("Select date")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.result: Optional[str] = None
+
+        initial = _parse_ui_date(initial_text)
+        self.year_var = tk.IntVar(value=initial.year)
+        self.month_var = tk.IntVar(value=initial.month)
+        self.day_var = tk.IntVar(value=initial.day)
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+
+        ttk.Label(frm, text="Year").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(frm, text="Month").grid(row=0, column=1, sticky="w", padx=(0, 6))
+        ttk.Label(frm, text="Day").grid(row=0, column=2, sticky="w")
+
+        self.year_spin = ttk.Spinbox(frm, from_=2000, to=2100, textvariable=self.year_var, width=8)
+        self.year_spin.grid(row=1, column=0, sticky="w", padx=(0, 6))
+        self.month_spin = ttk.Spinbox(frm, from_=1, to=12, textvariable=self.month_var, width=6)
+        self.month_spin.grid(row=1, column=1, sticky="w", padx=(0, 6))
+        self.day_spin = ttk.Spinbox(frm, from_=1, to=31, textvariable=self.day_var, width=6)
+        self.day_spin.grid(row=1, column=2, sticky="w")
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=3, sticky="e", pady=(10, 0))
+        ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side="right")
+        ttk.Button(btns, text="OK", command=self._on_ok).pack(side="right", padx=(0, 6))
+
+        self.bind("<Return>", lambda _e: self._on_ok())
+        self.bind("<Escape>", lambda _e: self._on_cancel())
+
+        self.update_idletasks()
+        x = parent.winfo_rootx() + max((parent.winfo_width() - self.winfo_width()) // 2, 20)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - self.winfo_height()) // 2, 20)
+        self.geometry(f"+{x}+{y}")
+
+    def _normalize_day(self) -> int:
+        y = int(self.year_var.get())
+        m = int(self.month_var.get())
+        m = max(1, min(12, m))
+        self.month_var.set(m)
+        max_day = calendar.monthrange(y, m)[1]
+        d = int(self.day_var.get())
+        d = max(1, min(max_day, d))
+        self.day_var.set(d)
+        return d
+
+    def _on_ok(self) -> None:
+        d = self._normalize_day()
+        y = int(self.year_var.get())
+        m = int(self.month_var.get())
+        self.result = date(y, m, d).strftime("%B %d, %Y")
+        self.destroy()
+
+    def _on_cancel(self) -> None:
+        self.result = None
+        self.destroy()
+
+
+def _pick_date(parent: tk.Tk, current_value: str) -> Optional[str]:
+    dlg = DatePickerDialog(parent, current_value)
+    parent.wait_window(dlg)
+    return dlg.result
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="NDE technician intake (desktop / Tkinter).")
     ap.add_argument("--db-path", default=str(REPO_ROOT / "nde_desktop.sqlite"))
     ap.add_argument("--templates-root", default=str(REPO_ROOT / "Templates"))
     ap.add_argument("--output-root", default=str(REPO_ROOT / "desktop_output"))
-    ap.add_argument(
-        "--extraction-json",
-        default=str(REPO_ROOT / "samples" / "telescopic_boom_lift_extraction.json"),
-    )
     ap.add_argument("--seed-raeq-spec", default="56400-56420")
     ap.add_argument("--technician-id", default="DEFAULT_TECH")
     ap.add_argument(
@@ -89,32 +164,29 @@ def main() -> None:
 
     ttk.Label(frm, text="Inspection date").grid(row=1, column=0, sticky="w", pady=2)
     insp_var = tk.StringVar(value="August 28, 2025")
-    ttk.Entry(frm, textvariable=insp_var, width=50).grid(row=1, column=1, sticky="ew", pady=2)
+    insp_row = ttk.Frame(frm)
+    insp_row.grid(row=1, column=1, sticky="ew", pady=2)
+    ttk.Entry(insp_row, textvariable=insp_var, width=40, state="readonly").pack(side="left", fill="x", expand=True)
+    ttk.Button(
+        insp_row,
+        text="Calendar…",
+        command=lambda: (lambda v: insp_var.set(v) if v else None)(_pick_date(root, insp_var.get())),
+    ).pack(side="left", padx=(6, 0))
 
     ttk.Label(frm, text="Expiry date").grid(row=2, column=0, sticky="w", pady=2)
     exp_var = tk.StringVar(value="August 28, 2026")
-    ttk.Entry(frm, textvariable=exp_var, width=50).grid(row=2, column=1, sticky="ew", pady=2)
+    exp_row = ttk.Frame(frm)
+    exp_row.grid(row=2, column=1, sticky="ew", pady=2)
+    ttk.Entry(exp_row, textvariable=exp_var, width=40, state="readonly").pack(side="left", fill="x", expand=True)
+    ttk.Button(
+        exp_row,
+        text="Calendar…",
+        command=lambda: (lambda v: exp_var.set(v) if v else None)(_pick_date(root, exp_var.get())),
+    ).pack(side="left", padx=(6, 0))
 
-    ttk.Label(frm, text="Extraction JSON").grid(row=3, column=0, sticky="w", pady=2)
-    json_var = tk.StringVar(value=args.extraction_json)
-
-    def browse_json() -> None:
-        p = filedialog.askopenfilename(
-            parent=root,
-            title="Select extraction JSON",
-            filetypes=[("JSON", "*.json"), ("All", "*.*")],
-        )
-        if p:
-            json_var.set(p)
-
-    json_row = ttk.Frame(frm)
-    json_row.grid(row=3, column=1, sticky="ew", pady=2)
-    ttk.Entry(json_row, textvariable=json_var, width=40).pack(side="left", fill="x", expand=True)
-    ttk.Button(json_row, text="Browse…", command=browse_json).pack(side="left", padx=(6, 0))
-
-    ttk.Label(frm, text="Photo paths (optional)").grid(row=4, column=0, sticky="nw", pady=2)
+    ttk.Label(frm, text="Photo paths (optional)").grid(row=3, column=0, sticky="nw", pady=2)
     photo_list = tk.Listbox(frm, height=4, width=50)
-    photo_list.grid(row=4, column=1, sticky="ew", pady=2)
+    photo_list.grid(row=3, column=1, sticky="ew", pady=2)
 
     def add_photos() -> None:
         paths = filedialog.askopenfilenames(
@@ -129,7 +201,7 @@ def main() -> None:
         photo_list.delete(0, tk.END)
 
     ph_btns = ttk.Frame(frm)
-    ph_btns.grid(row=5, column=1, sticky="w")
+    ph_btns.grid(row=4, column=1, sticky="w")
     ttk.Button(ph_btns, text="Add photos…", command=add_photos).pack(side="left", padx=(0, 6))
     ttk.Button(ph_btns, text="Clear", command=clear_photos).pack(side="left")
 
@@ -163,6 +235,45 @@ def main() -> None:
         title = field_name.replace("_", " ").title()
         val = simpledialog.askstring(title, f"{prompt}\n\nField: {field_name}", parent=root)
         return (val or "").strip()
+
+    def choose_status(options: List[UIStatusChoice]) -> str:
+        dlg = tk.Toplevel(root)
+        dlg.title("Select Status")
+        dlg.transient(root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        result: Dict[str, str] = {"value": ""}
+
+        frm_status = ttk.Frame(dlg, padding=10)
+        frm_status.grid(row=0, column=0, sticky="nsew")
+
+        ttk.Label(frm_status, text="RR items found. Select Status:").grid(row=0, column=0, sticky="w")
+        labels = [o.label for o in options]
+        default_label = next((o.label for o in options if o.is_default), labels[0] if labels else "")
+        selected_var = tk.StringVar(value=default_label)
+        cb = ttk.Combobox(frm_status, values=labels, textvariable=selected_var, width=48, state="readonly")
+        cb.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+
+        def on_ok() -> None:
+            chosen = selected_var.get().strip()
+            if not chosen:
+                messagebox.showerror("Missing status", "Please choose a status.", parent=dlg)
+                return
+            result["value"] = chosen
+            dlg.destroy()
+
+        def on_cancel() -> None:
+            result["value"] = default_label
+            dlg.destroy()
+
+        btns = ttk.Frame(frm_status)
+        btns.grid(row=2, column=0, sticky="e", pady=(10, 0))
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right")
+        ttk.Button(btns, text="OK", command=on_ok).pack(side="right", padx=(0, 6))
+        dlg.bind("<Escape>", lambda _e: on_cancel())
+        dlg.bind("<Return>", lambda _e: on_ok())
+        dlg.wait_window()
+        return result["value"]
 
     def checklist_results_provider(rows):
         lines = "\n".join(f"  [{r.index}] {r.item_label}" for r in rows[:80])
@@ -201,16 +312,24 @@ def main() -> None:
         return results
 
     def run_session() -> None:
-        jpath = Path(json_var.get().strip())
-        if not jpath.is_file():
-            messagebox.showerror("Invalid file", f"Extraction JSON not found:\n{jpath}", parent=root)
-            return
-
-        try:
-            extraction = _load_extraction_json(jpath)
-        except Exception as exc:
-            messagebox.showerror("JSON error", str(exc), parent=root)
-            return
+        photos = [photo_list.get(i) for i in range(photo_list.size())]
+        extraction: ExtractionResult
+        if photos:
+            try:
+                log_line("Running live photo extraction...")
+                extraction = extract_from_photos(photos)
+                if not extraction.fields:
+                    log_line("OCR returned no usable fields.")
+                    log_line("Falling back to full manual field entry.")
+                    extraction = ExtractionResult(fields={})
+            except Exception as exc:
+                log_line(f"Live extraction failed: {exc}")
+                log_line("Falling back to full manual field entry.")
+                extraction = ExtractionResult(fields={})
+        else:
+            # No photos provided -> manual data entry only.
+            log_line("No photos selected. Using full manual field entry.")
+            extraction = ExtractionResult(fields={})
 
         db_path = Path(args.db_path)
         output_root = Path(args.output_root)
@@ -223,8 +342,6 @@ def main() -> None:
             display_name="Desktop Technician",
             raeq_spec=args.seed_raeq_spec,
         )
-
-        photos = [photo_list.get(i) for i in range(photo_list.size())]
 
         service = SessionService(
             db_path=db_path,
@@ -251,6 +368,7 @@ def main() -> None:
                 confirm_existing_callback=confirm_existing,
                 resolve_missing_field_callback=resolve_missing,
                 checklist_results_provider=checklist_results_provider,
+                status_choice_callback=choose_status,
             )
         except Exception as exc:
             root.config(cursor="")

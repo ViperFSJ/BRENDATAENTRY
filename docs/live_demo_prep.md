@@ -16,18 +16,11 @@ Use this when you **don’t know** the customer or equipment type until you’re
    - On Windows use `py -3` if `python3` is missing.
 
 2. **Repo / folder**
-   - Use a **fresh clone or copy** of the project so `Templates/` and `samples/` are present.
-   - Optional: run one dry run with the sample JSON to confirm outputs appear under `desktop_output/`.
+   - Use a **fresh clone or copy** of the project so `Templates/` are present.
+   - Optional: run one dry run with manual entry to confirm outputs appear under `desktop_output/`.
 
 3. **“Unknown equipment” mode**
-   - For a **fully manual** walkthrough (no OCR values), use the empty extraction file:
-     - Path: `samples/live_trial_manual_extraction.json`
-   - In the desktop UI: set **Extraction JSON** to that file (Browse…), or launch:
-     ```bash
-     python3 scripts/run_desktop_intake.py \
-       --extraction-json samples/live_trial_manual_extraction.json \
-       --force-new-equipment
-     ```
+   - For a **fully manual** walkthrough, just run the desktop UI without adding photos.
    - You will get **more prompts** (client, unit ID, serial, manufacturer, model, equipment type, basket fields, etc.) — that is expected and good for a live demo.
 
 4. **RAEQ pool**
@@ -38,7 +31,7 @@ Use this when you **don’t know** the customer or equipment type until you’re
    - Or delete the local SQLite file (`nde_desktop.sqlite` by default) for a clean numbering story (only if you don’t need old trial data).
 
 5. **Photos (optional)**
-   - If you’ll embed photos into the checklist, have **image files on disk** (phone transfer or camera card). Use **Add photos…** in the desktop UI before **Run inspection**.
+   - If you want OCR auto-fill (and/or photo embed), have **image files on disk** (phone transfer or camera card). Use **Add photos…** in the desktop UI before **Run inspection**.
 
 6. **Class choice on the day**
    - **Pick the closest matching folder** in the **Equipment class** dropdown (e.g. Telescopic Boom Lift, Mobile Crane, **General** if nothing fits).
@@ -55,7 +48,7 @@ Use this when you **don’t know** the customer or equipment type until you’re
 1. Open the desktop UI (`run_desktop_intake.py`).
 2. Set **Inspection date** / **Expiry date** to real values.
 3. **Equipment class** → choose from dropdown (no typing).
-4. **Extraction JSON** → `live_trial_manual_extraction.json` until/unless you have a real OCR JSON from your capture pipeline.
+4. Add current session photos if you want OCR auto-fill; otherwise continue with manual prompts.
 5. **Run inspection** → answer prompts calmly; say out loud what you’re entering so observers follow.
 6. Show outputs: `desktop_output/<Class>/<RAEQ>/` — checklist + certificate `.docx`.
 
@@ -67,11 +60,11 @@ Use this when you **don’t know** the customer or equipment type until you’re
 |--------|-----------|
 | `No module named 'tkinter'` | Install Python from python.org (includes Tk), or on Linux `sudo apt install python3-tk`. |
 | Wrong class picked | Close, reopen, pick another class — use `--force-new-equipment` so RAEQ assignment isn’t confused by an earlier match attempt. |
-| Too many prompts | Expected with empty JSON; pre-fill a JSON tomorrow morning if you get plate photos + OCR overnight. |
+| Too many prompts | Expected when no photos are provided or OCR confidence is low. |
 | No network | OK — app is offline; SQLite + local files only. |
 
 ---
 
 ## Optional: tomorrow morning with 10 minutes of data
 
-If you can snap **data plate photos** and run your OCR export before the meeting, replace the empty JSON path with that file — fewer prompts, faster demo, same flow.
+If you can snap **data plate photos** before the meeting, use them in **Add photos…** for live OCR auto-fill and fewer prompts.

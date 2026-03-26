@@ -111,11 +111,24 @@ def _find_checklist_table_and_columns(root: ET.Element) -> Tuple[ET.Element, int
 
 
 def _set_container_text(container: ET.Element, w_ns: str, value_text: str) -> None:
+    def set_run_black(run_elem: ET.Element) -> None:
+        rpr = run_elem.find(_w(w_ns, "rPr"))
+        if rpr is None:
+            rpr = ET.SubElement(run_elem, _w(w_ns, "rPr"))
+        color = rpr.find(_w(w_ns, "color"))
+        if color is None:
+            color = ET.SubElement(rpr, _w(w_ns, "color"))
+        color.set(_w(w_ns, "val"), "000000")
+
     # Replace any existing <w:t> nodes with selected value.
     t_nodes = [e for e in container.iter() if _local_name(e.tag) == "t"]
     if t_nodes:
+        parent_map = {c: p for p in container.iter() for c in p}
         # Set first text run; clear any additional runs to avoid duplicated values.
         t_nodes[0].text = value_text
+        run = parent_map.get(t_nodes[0])
+        if run is not None:
+            set_run_black(run)
         for t in t_nodes[1:]:
             t.text = ""
         return
@@ -130,6 +143,7 @@ def _set_container_text(container: ET.Element, w_ns: str, value_text: str) -> No
         if sdt_content is not None:
             p = ET.SubElement(sdt_content, _w(w_ns, "p"))
             r = ET.SubElement(p, _w(w_ns, "r"))
+            set_run_black(r)
             t = ET.SubElement(r, _w(w_ns, "t"))
             t.text = value_text
             return
@@ -138,8 +152,65 @@ def _set_container_text(container: ET.Element, w_ns: str, value_text: str) -> No
     p_nodes = [e for e in container.iter() if _local_name(e.tag) == "p"]
     p = p_nodes[0] if p_nodes else ET.SubElement(container, _w(w_ns, "p"))
     r = ET.SubElement(p, _w(w_ns, "r"))
+    set_run_black(r)
     t = ET.SubElement(r, _w(w_ns, "t"))
     t.text = value_text
+
+
+def _read_doc_xml_bytes_from_template(template_dotx_path: Union[str, Path]) -> bytes:
+    template_dotx_path = Path(template_dotx_path)
+    with zipfile.ZipFile(template_dotx_path, "r") as zin:
+        for name in zin.namelist():
+            if name.endswith("word/document.xml"):
+                return zin.read(name)
+    raise FileNotFoundError(f"word/document.xml not found in {template_dotx_path}")
+
+
+def _iter_text_nodes(root: ET.Element) -> List[ET.Element]:
+    return [e for e in root.iter() if _local_name(e.tag) == "t"]
+
+
+def read_status_choices_from_template(template_dotx_path: Union[str, Path]) -> List[Dict[str, Union[str, bool]]]:
+    """
+    Read available Status dropdown options from checklist template.
+    Returns list like: [{"label": "...", "is_default": bool}, ...]
+    """
+    doc_root = ET.fromstring(_read_doc_xml_bytes_from_template(template_dotx_path))
+    w_ns = _get_w_namespace(doc_root)
+    for sdt in doc_root.iter(_w(w_ns, "sdt")):
+        sdt_pr = sdt.find(_w(w_ns, "sdtPr"))
+        if sdt_pr is None:
+            continue
+        dd = sdt_pr.find(_w(w_ns, "dropDownList"))
+        if dd is None:
+            continue
+        items = dd.findall(_w(w_ns, "listItem"))
+        choices: List[Dict[str, Union[str, bool]]] = []
+        default_idx = 0
+        for i, item in enumerate(items):
+            probe = (item.get(_w(w_ns, "displayText")) or item.get(_w(w_ns, "value")) or "").strip().lower()
+            if probe and probe not in ("choose an item.", "choose an item"):
+                default_idx = i
+                break
+        for idx, item in enumerate(items):
+            label = (item.get(_w(w_ns, "displayText")) or item.get(_w(w_ns, "value")) or "").strip()
+            if not label:
+                continue
+            choices.append({"label": label, "is_default": idx == default_idx})
+        lowered = [str(c["label"]).strip().lower() for c in choices]
+        if choices and ("requires review" in lowered or "certification recommended" in lowered):
+            return choices
+    return []
+
+
+def template_has_basket_section(template_dotx_path: Union[str, Path]) -> bool:
+    doc_root = ET.fromstring(_read_doc_xml_bytes_from_template(template_dotx_path))
+    text = " ".join([(t.text or "").strip().lower() for t in _iter_text_nodes(doc_root) if (t.text or "").strip()])
+    if "basket information" not in text:
+        return False
+    dims = ["maximum height", "maximum reach", "length", "width", "height"]
+    present = sum(1 for d in dims if d in text)
+    return present >= 2
 
 
 def _fill_checklist_report_details(root: ET.Element, w_ns: str, fields: Dict[str, str]) -> None:

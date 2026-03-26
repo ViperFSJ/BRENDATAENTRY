@@ -11,7 +11,7 @@ This walks through testing the **offline desktop intake** window (`Tkinter`). It
 | **Computer** | macOS, Windows, or Linux with a **graphical desktop** (not SSH-only). |
 | **Python 3** | Version **3.9+** recommended. Check: open Terminal / Command Prompt and run `python3 --version` (Mac/Linux) or `py -3 --version` / `python --version` (Windows). |
 | **Tkinter** | Usually included with Python from **python.org**. If the app fails with `No module named 'tkinter'`, install it (e.g. Ubuntu: `sudo apt install python3-tk`). |
-| **Project folder** | The full **BrenDataEntry** (or your deployment) folder containing `nde_app/`, `Templates/`, `samples/`, and `scripts/`. |
+| **Project folder** | The full **BrenDataEntry** (or your deployment) folder containing `nde_app/`, `Templates/`, and `scripts/`. |
 
 ---
 
@@ -75,27 +75,22 @@ py -3 scripts\run_desktop_intake.py --force-new-equipment
    Use the **dropdown** (do not type free text). Pick e.g. **Telescopic Boom Lift** or **General**.
 
 2. **Inspection date** / **Expiry date**  
-   Edit if needed. Format examples that work: `August 28, 2025` or `2025-08-28`.
+   Use the **Calendar…** buttons and confirm dates.
 
-3. **Extraction JSON**  
-   - Default points at a sample file under `samples/` (simulated OCR).  
-   - **Browse…** to pick another JSON if you have one.  
-   - The file must be valid JSON in the expected shape (fields + confidence).
-
-4. **Photos (optional)**  
-   - **Add photos…** to attach images for figure placeholders in the checklist.  
+3. **Photos (optional)**  
+   - **Add photos…** to provide current session photos for OCR auto-fill and checklist figures.  
    - **Clear** removes the list.
 
-5. Click **Run inspection**.
+4. Click **Run inspection**.
 
-6. **Follow the pop-up dialogs** (order may vary slightly based on data):
+5. **Follow the pop-up dialogs** (order may vary slightly based on data):
    - **Existing equipment?** — If the system finds a possible match (unit + serial), you’ll be asked to confirm. Choose **Yes** or **No**.  
      - With `--force-new-equipment`, this step is skipped (always “new”).
    - **Job number**, **Location**, **Province** (2 letters, e.g. `AB`), **LSD** — type answers and click OK (or leave as prompted by the dialog).
    - **Client reference** — You may be asked if client reference is the same as Unit ID; then possibly a reference field.
    - **Checklist** — You’ll be asked if **all items are OK**.  
      - If **No**, you’ll enter row **indexes** (numbers shown in the list) for **RR** and **N/A**, separated by commas or spaces.
-   - If any item is **RR**, you may be prompted for **Status** text.
+  - If any item is **RR**, you will choose **Status** from template options.
 
 7. When finished, a **completion** message shows the **RAEQ** and reminds you where files were written. The main window **log** at the bottom lists paths to the **checklist** and **certificate** `.docx` files.
 
@@ -121,16 +116,11 @@ python3 scripts/run_desktop_intake.py \
 
 ---
 
-## 6. Try a “harder” OCR sample (more prompts)
+## 6. OCR/manual behavior
 
-To exercise manual fallbacks (low confidence fields), use the low-confidence sample:
-
-```bash
-python3 scripts/run_desktop_intake.py \
-  --extraction-json samples/telescopic_boom_lift_extraction_low_confidence.json
-```
-
-You should see **more** dialogs asking for missing/low-confidence values.
+- If photos are provided and OCR succeeds, fields are pre-filled from those photos.
+- If OCR fails (or confidence is too low), prompts collect missing fields manually.
+- If no photos are provided, the session runs in full manual entry mode.
 
 ---
 
@@ -142,7 +132,7 @@ You should see **more** dialogs asking for missing/low-confidence values.
 | Window does not appear | Run from a **local** session with a monitor; remote desktop may need display forwarding. |
 | `No template classes found` | Run the command from the **project root**; ensure the `Templates` folder is next to `nde_app`. |
 | Wrong Python | Use `python3` on Mac/Linux; on Windows use `py -3` to force Python 3. |
-| JSON error | Confirm **Extraction JSON** path is correct and file is valid JSON. |
+| OCR not available | Install `tesseract` or continue with manual entry prompts. |
 
 ---
 
@@ -150,10 +140,10 @@ You should see **more** dialogs asking for missing/low-confidence values.
 
 - [ ] Python 3 runs from terminal.  
 - [ ] `python3 scripts/run_desktop_intake.py` opens the window.  
-- [ ] Completed one full run with default sample JSON.  
+- [ ] Completed one full run with either photo OCR or full manual entry.  
 - [ ] Located output `.docx` files under `desktop_output/`.  
 - [ ] (Optional) Ran with `--force-new-equipment` for a second run without match prompts.  
-- [ ] (Optional) Tested low-confidence JSON for extra prompts.
+- [ ] (Optional) Verified manual fallback by running without photos.
 
 ---
 
