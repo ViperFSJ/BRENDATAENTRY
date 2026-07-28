@@ -40,6 +40,7 @@ object DocxFillers {
 
         replaceFieldTokens(document, fields)
         fillReportDetails(root, fields, checklist.table)
+        fillProvinceCheckboxes(root, fields)
         fillChecklistResults(checklist, className, rows, resultsBySlug)
         entries[documentEntry] = DocxXml.documentBytes(document)
 
@@ -201,6 +202,157 @@ object DocxFillers {
         }
     }
 
+    private fun fillProvinceCheckboxes(root: Element, fields: Map<String, String>) {
+        val selected = parseProvinceSelections(fields)
+        if (selected.boxes.isEmpty() && selected.otherText.isBlank()) return
+
+        val parentMap = HashMap<Node, Node>()
+        fun indexParents(node: Node) {
+            val children = node.childNodes
+            for (i in 0 until children.length) {
+                val child = children.item(i)
+                parentMap[child] = node
+                indexParents(child)
+            }
+        }
+        indexParents(root)
+
+        val w14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+        val wNs = DocxXml.WORD_NAMESPACE
+
+        for (sdt in elements(root, "sdt")) {
+            if (elements(sdt, "checkbox").isEmpty()) continue
+            val label = checkboxLabel(sdt, parentMap).trim()
+            val key = normalizeProvinceCheckboxLabel(label) ?: continue
+            val shouldCheck = when (key) {
+                "OTHER" -> selected.otherText.isNotBlank() || "OTHER" in selected.boxes
+                else -> key in selected.boxes
+            }
+            setWordCheckbox(sdt, checked = shouldCheck, w14 = w14, wNs = wNs)
+            if (key == "OTHER" && selected.otherText.isNotBlank()) {
+                fillOtherProvincePlaceholder(sdt, parentMap, selected.otherText)
+            }
+        }
+    }
+
+    private data class ProvinceSelection(
+        val boxes: Set<String>,
+        val otherText: String,
+    )
+
+    private fun parseProvinceSelections(fields: Map<String, String>): ProvinceSelection {
+        val raw = fields["provinces"].orEmpty()
+        val tokens = raw.split(',', ';', ' ')
+            .map { it.trim().uppercase(Locale.US) }
+            .filter { it.isNotEmpty() }
+            .toMutableList()
+        // Back-compat: single province field
+        val single = fields["province"].orEmpty().trim().uppercase(Locale.US)
+        if (single.isNotEmpty() && single !in tokens) tokens += single
+
+        val boxes = linkedSetOf<String>()
+        val otherParts = mutableListOf<String>()
+        for (token in tokens) {
+            when (token) {
+                "BC" -> boxes += "BC"
+                "AB" -> boxes += "AB"
+                "SK" -> boxes += "SK"
+                "NU", "NT", "NU/NT", "NT/NU" -> boxes += "NU/NT"
+                "OTHER" -> boxes += "OTHER"
+                else -> {
+                    boxes += "OTHER"
+                    otherParts += token
+                }
+            }
+        }
+        val explicitOther = fields["province_other"].orEmpty().trim().uppercase(Locale.US)
+        if (explicitOther.isNotEmpty()) {
+            boxes += "OTHER"
+            otherParts += explicitOther.split(',', ';', ' ').map { it.trim() }.filter { it.isNotEmpty() }
+        }
+        return ProvinceSelection(
+            boxes = boxes,
+            otherText = otherParts.distinct().joinToString(", "),
+        )
+    }
+
+    private fun normalizeProvinceCheckboxLabel(label: String): String? {
+        val n = label.replace(Regex("\\s+"), " ").trim().uppercase(Locale.US)
+        return when {
+            n == "BC" -> "BC"
+            n == "AB" -> "AB"
+            n == "SK" -> "SK"
+            n == "NU/NT" || n == "NU/N T" || n.startsWith("NU/") -> "NU/NT"
+            n.startsWith("OTHER") -> "OTHER"
+            else -> null
+        }
+    }
+
+    private fun checkboxLabel(sdt: Element, parentMap: Map<Node, Node>): String {
+        var para: Node? = sdt
+        while (para != null && (para !is Element || DocxXml.localName(para) != "p")) {
+            para = parentMap[para]
+        }
+        if (para !is Element) return ""
+        var after = false
+        val parts = mutableListOf<String>()
+        val children = para.childNodes
+        for (i in 0 until children.length) {
+            val child = children.item(i)
+            if (child === sdt) {
+                after = true
+                continue
+            }
+            if (!after || child !is Element) continue
+            for (t in elements(child, "t")) {
+                val text = t.textContent.orEmpty()
+                if (text.isNotEmpty()) parts += text
+            }
+        }
+        return parts.joinToString("")
+    }
+
+    private fun setWordCheckbox(sdt: Element, checked: Boolean, w14: String, wNs: String) {
+        val checkbox = elements(sdt, "checkbox").firstOrNull() ?: return
+        val checkedNode = elements(checkbox, "checked").firstOrNull()
+            ?: sdt.ownerDocument.createElementNS(w14, "w14:checked").also { created ->
+                checkbox.insertBefore(created, checkbox.firstChild)
+            }
+        checkedNode.setAttributeNS(w14, "w14:val", if (checked) "1" else "0")
+
+        val stateNode = elements(checkbox, if (checked) "checkedState" else "uncheckedState").firstOrNull()
+        val stateVal = stateNode?.getAttributeNS(w14, "val")
+            ?.takeIf { it.isNotBlank() }
+            ?: if (checked) "00FE" else "006F"
+        val font = stateNode?.getAttributeNS(w14, "font")?.takeIf { it.isNotBlank() } ?: "Wingdings"
+        val symChar = if (stateVal.length == 4) "F$stateVal" else stateVal
+
+        // Update visible Wingdings symbol inside sdtContent.
+        for (sym in elements(sdt, "sym")) {
+            sym.setAttributeNS(wNs, "w:font", font)
+            sym.setAttributeNS(wNs, "w:char", symChar)
+        }
+    }
+
+    private fun fillOtherProvincePlaceholder(
+        otherSdt: Element,
+        parentMap: Map<Node, Node>,
+        otherText: String,
+    ) {
+        var tr: Node? = otherSdt
+        while (tr != null && (tr !is Element || DocxXml.localName(tr) != "tr")) {
+            tr = parentMap[tr]
+        }
+        if (tr !is Element) return
+        for (t in elements(tr, "t")) {
+            val cur = t.textContent.orEmpty().trim()
+            if (cur.equals("XX", ignoreCase = true) || cur == "xx") {
+                t.textContent = otherText
+                return
+            }
+        }
+    }
+
     private fun fillReportDetails(
         root: Element,
         fields: Map<String, String>,
@@ -259,14 +411,12 @@ object DocxFillers {
                 // Template uses "LSD:" as the row label; also accept plain "lsd".
                 val isLsdRow = label == "lsd" || label == "lsd:" || label.startsWith("lsd")
                 if (isLsdRow) {
-                    val provinceValue = fields["province"]?.trim().orEmpty()
                     val lsdValue = fields["lsd"]?.trim().orEmpty()
-                    // Match desktop Python: province in next cell, LSD value in the one after.
-                    if (provinceValue.isNotEmpty() && index + 1 < containers.size) {
-                        DocxXml.setContainerText(containers[index + 1], provinceValue)
-                    }
+                    // Province marks go on the BC/AB/SK/... checkbox row, not this LSD: cell.
                     if (lsdValue.isNotEmpty() && index + 2 < containers.size) {
                         DocxXml.setContainerText(containers[index + 2], lsdValue)
+                    } else if (lsdValue.isNotEmpty() && index + 1 < containers.size) {
+                        DocxXml.setContainerText(containers[index + 1], lsdValue)
                     }
                     continue
                 }

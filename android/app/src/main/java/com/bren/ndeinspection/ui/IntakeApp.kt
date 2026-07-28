@@ -204,15 +204,12 @@ private fun ClassDropdown(options: List<String>, selected: String, onSelect: (St
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FieldsStep(state: UiState, vm: IntakeViewModel) {
-    val provinces = listOf(
-        "AB", "BC", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL", "YT", "NT", "NU",
-    )
+    val provinceOptions = listOf("BC", "AB", "SK", "NU/NT", "Other")
     val labels = mapOf(
         "client_name" to "Client name",
         "owner_name" to "Owner name",
         "job_no" to "Job number",
         "location" to "Location",
-        "province" to "Province (required)",
         "lsd" to "LSD",
         "client_unit_id" to "Client unit ID",
         "serial_no" to "Serial number",
@@ -234,62 +231,49 @@ private fun FieldsStep(state: UiState, vm: IntakeViewModel) {
             Text(state.message, modifier = Modifier.padding(vertical = 8.dp))
         }
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(fieldOrder) { key ->
-                if (key == "province") {
-                    ProvinceDropdown(
-                        options = provinces,
-                        selected = state.fieldValues["province"].orEmpty(),
-                        onSelect = { vm.updateField("province", it) },
-                    )
-                } else {
+            item {
+                Text("Inspection province(s)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Check all that apply — some clients need multiple boxes marked.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 6.dp),
+                ) {
+                    provinceOptions.forEach { box ->
+                        FilterChip(
+                            selected = box in state.provinceBoxes,
+                            onClick = { vm.toggleProvinceBox(box) },
+                            label = { Text(box) },
+                        )
+                    }
+                }
+                if ("Other" in state.provinceBoxes) {
                     OutlinedTextField(
-                        value = state.fieldValues[key].orEmpty(),
-                        onValueChange = { vm.updateField(key, it) },
-                        label = { Text(labels[key] ?: key) },
-                        modifier = Modifier.fillMaxWidth(),
+                        value = state.provinceOtherText,
+                        onValueChange = vm::setProvinceOtherText,
+                        label = { Text("Other province/territory (e.g. MB, ON)") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
                         singleLine = true,
                     )
                 }
+            }
+            items(fieldOrder) { key ->
+                OutlinedTextField(
+                    value = state.fieldValues[key].orEmpty(),
+                    onValueChange = { vm.updateField(key, it) },
+                    label = { Text(labels[key] ?: key) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = vm::continueToChecklist, modifier = Modifier.fillMaxWidth()) {
             Text("Continue to checklist")
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProvinceDropdown(
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Province (required)") },
-            placeholder = { Text("Select province") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
-            isError = selected.isBlank(),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { code ->
-                DropdownMenuItem(
-                    text = { Text(code) },
-                    onClick = {
-                        onSelect(code)
-                        expanded = false
-                    },
-                )
-            }
         }
     }
 }

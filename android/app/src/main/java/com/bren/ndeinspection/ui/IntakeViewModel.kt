@@ -40,6 +40,9 @@ data class UiState(
     val forceNewEquipment: Boolean = true,
     val extraction: ExtractionResult = ExtractionResult(),
     val fieldValues: Map<String, String> = emptyMap(),
+    /** Checklist form boxes: BC, AB, SK, NU/NT, Other (multi-select). */
+    val provinceBoxes: Set<String> = emptySet(),
+    val provinceOtherText: String = "",
     val checklistRows: List<ChecklistRow> = emptyList(),
     val checklistResults: Map<String, String> = emptyMap(),
     val statusChoices: List<Pair<String, Boolean>> = emptyList(),
@@ -93,6 +96,16 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(fieldValues = it.fieldValues + (key to value), message = "")
     }
 
+    fun toggleProvinceBox(box: String) = _state.update { st ->
+        val next = st.provinceBoxes.toMutableSet()
+        if (box in next) next.remove(box) else next.add(box)
+        st.copy(provinceBoxes = next, message = "")
+    }
+
+    fun setProvinceOtherText(value: String) = _state.update {
+        it.copy(provinceOtherText = value, message = "")
+    }
+
     fun setChecklistResult(slug: String, result: String) = _state.update {
         it.copy(checklistResults = it.checklistResults + (slug to result))
     }
@@ -137,7 +150,6 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                 "owner_name" to "",
                 "job_no" to "",
                 "location" to "",
-                "province" to "",
                 "lsd" to "",
                 "client_unit_id" to "",
                 "serial_no" to "",
@@ -150,8 +162,6 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
             val merged = defaults.mapValues { (k, def) ->
                 extraction.fields[k]?.value?.takeIf { it.isNotBlank() } ?: def
             }.toMutableMap()
-            // Never auto-fill province from OCR — always confirm inspection province.
-            merged["province"] = ""
             if (repo.needsBasketFields(st.className)) {
                 listOf(
                     "basket_max_height",
@@ -168,6 +178,8 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                     busy = false,
                     extraction = extraction,
                     fieldValues = merged,
+                    provinceBoxes = emptySet(),
+                    provinceOtherText = "",
                     checklistRows = rows,
                     checklistResults = rows.associate { r -> r.labelSlug to "OK" },
                     statusChoices = statusChoices,
@@ -176,9 +188,9 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                         ?: "Certification recommended",
                     step = WizardStep.FIELDS,
                     message = if (extraction.fields.isEmpty()) {
-                        "No OCR fields found — enter values manually. Province is required."
+                        "No OCR fields found — enter values manually. Select one or more province boxes."
                     } else {
-                        "OCR filled ${extraction.fields.size} field(s). Confirm province (required), then continue."
+                        "OCR filled ${extraction.fields.size} field(s). Select province checkbox(es), then continue."
                     },
                 )
             }
@@ -186,10 +198,19 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun continueToChecklist() {
-        val province = _state.value.fieldValues["province"].orEmpty().trim()
-        if (province.length != 2) {
+        val st = _state.value
+        val hasBox = st.provinceBoxes.isNotEmpty()
+        val otherText = st.provinceOtherText.trim()
+        val otherSelected = "Other" in st.provinceBoxes
+        if (!hasBox) {
             _state.update {
-                it.copy(message = "Select the 2-letter province where the inspection is taking place (e.g. AB).")
+                it.copy(message = "Select at least one province checkbox (BC, AB, SK, NU/NT, and/or Other).")
+            }
+            return
+        }
+        if (otherSelected && otherText.isEmpty()) {
+            _state.update {
+                it.copy(message = "Other is checked — enter the province/territory code(s) for Other.")
             }
             return
         }
@@ -205,6 +226,18 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                 val clientRef = fv["client_reference"].orEmpty().trim().ifEmpty {
                     fv["client_unit_id"].orEmpty().ifEmpty { "-" }
                 }
+                val provinceList = buildList {
+                    st.provinceBoxes.filter { it != "Other" }.forEach { add(it) }
+                    if ("Other" in st.provinceBoxes) {
+                        add("OTHER")
+                        val other = st.provinceOtherText.trim()
+                        if (other.isNotEmpty()) add(other)
+                    }
+                }
+                val primaryProvince = st.provinceBoxes.firstOrNull { it in setOf("AB", "BC", "SK") }
+                    ?: st.provinceBoxes.firstOrNull { it == "NU/NT" }?.let { "NT" }
+                    ?: st.provinceOtherText.split(',', ' ').map { it.trim() }.firstOrNull { it.length == 2 }
+                    ?: ""
                 val fields = SessionFields(
                     className = st.className,
                     clientName = fv["client_name"].orEmpty(),
@@ -221,7 +254,7 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                     capacity = fv["capacity"].orEmpty(),
                     clientReference = clientRef,
                     lsd = fv["lsd"].orEmpty(),
-                    province = fv["province"].orEmpty(),
+                    province = primaryProvince,
                     basketMaxHeight = fv["basket_max_height"].orEmpty(),
                     basketMaxReach = fv["basket_max_reach"].orEmpty(),
                     basketLength = fv["basket_length"].orEmpty(),
@@ -232,11 +265,17 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                 if (results.values.any { it.equals("RR", true) }) {
                     results["__status__"] = st.selectedStatus
                 }
+                // Encode multi-province selection for DOCX checkbox fill.
+                val extras = mapOf(
+                    "provinces" to provinceList.joinToString(","),
+                    "province_other" to st.provinceOtherText.trim(),
+                )
                 val result = repo.runSession(
                     fields = fields,
                     checklistResults = results,
                     photoUris = st.photoUris,
                     forceNewEquipment = st.forceNewEquipment,
+                    fieldExtras = extras,
                     confirmExisting = { candidate ->
                         suspendCancellableCoroutine { cont ->
                             confirmContinuation = { yes -> cont.resume(yes) }

@@ -82,6 +82,7 @@ class SessionRepository(
         checklistResults: Map<String, String>,
         photoUris: List<Uri>,
         forceNewEquipment: Boolean,
+        fieldExtras: Map<String, String> = emptyMap(),
         confirmExisting: suspend (EquipmentCandidate) -> Boolean,
     ): SessionResult {
         seedRaeqPool(fields.technicianId)
@@ -162,7 +163,7 @@ class SessionRepository(
                 "basket_length" to fields.basketLength,
                 "basket_width" to fields.basketWidth,
                 "basket_height" to fields.basketHeight,
-            ),
+            ) + fieldExtras,
         )
 
         val photoFiles = copyPhotosToCache(photoUris)
