@@ -2,6 +2,7 @@ package com.bren.ndeinspection.domain
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.content.FileProvider
 import com.bren.ndeinspection.data.AppDatabase
 import com.bren.ndeinspection.data.ChecklistResultEntity
 import com.bren.ndeinspection.ocr.PhotoOcr
@@ -26,6 +27,37 @@ class SessionRepository(
     }
 
     suspend fun extractFromPhotos(uris: List<Uri>): ExtractionResult = ocr.extractFromPhotos(uris)
+
+    /** Copy picked/captured photos into app storage so URIs stay readable later. */
+    fun persistPhotos(uris: List<Uri>): List<Uri> {
+        if (uris.isEmpty()) return emptyList()
+        val dir = File(context.filesDir, "persisted_photos").apply { mkdirs() }
+        return uris.mapIndexedNotNull { index, uri ->
+            try {
+                val ext = guessExt(uri)
+                val out = File(dir, "p_${System.currentTimeMillis()}_${index}.$ext")
+                val ok = context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(out).use { output -> input.copyTo(output) }
+                    true
+                } ?: run {
+                    val path = uri.path
+                    if (!path.isNullOrBlank() && File(path).exists()) {
+                        File(path).copyTo(out, overwrite = true)
+                        true
+                    } else false
+                }
+                if (ok && out.exists() && out.length() > 0) {
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        out,
+                    )
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     fun checklistRows(className: String): List<ChecklistRow> =
         ChecklistXml.extractItemsForClass(context.assets, className)
@@ -134,7 +166,14 @@ class SessionRepository(
         )
 
         val photoFiles = copyPhotosToCache(photoUris)
-        val inserted = PhotoEmbedder.insertPhotos(checklistOut, photoFiles)
+        if (photoUris.isNotEmpty() && photoFiles.isEmpty()) {
+            // Keep going, but surface via inserted count 0 on result.
+        }
+        val inserted = if (photoFiles.isEmpty()) {
+            0
+        } else {
+            PhotoEmbedder.insertPhotos(checklistOut, photoFiles)
+        }
 
         DocxFillers.fillCertificate(
             templateFile = certTemplate,
@@ -186,18 +225,32 @@ class SessionRepository(
     }
 
     private fun copyPhotosToCache(uris: List<Uri>): List<File> {
-        val dir = File(context.cacheDir, "session_photos").apply {
-            deleteRecursively()
+        val dir = File(context.filesDir, "session_photos_${System.currentTimeMillis()}").apply {
             mkdirs()
         }
         return uris.mapIndexedNotNull { index, uri ->
             try {
                 val ext = guessExt(uri)
                 val out = File(dir, "photo_${index + 1}.$ext")
-                context.contentResolver.openInputStream(uri)?.use { input ->
+                val copied = context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(out).use { output -> input.copyTo(output) }
-                } ?: return@mapIndexedNotNull null
-                out
+                    true
+                } ?: run {
+                    // Fallback for file:// and some FileProvider edge cases
+                    val path = uri.path
+                    if (!path.isNullOrBlank()) {
+                        val src = File(path)
+                        if (src.exists()) {
+                            src.copyTo(out, overwrite = true)
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                }
+                if (copied && out.exists() && out.length() > 0) out else null
             } catch (_: Exception) {
                 null
             }
@@ -205,10 +258,12 @@ class SessionRepository(
     }
 
     private fun guessExt(uri: Uri): String {
-        val name = uri.lastPathSegment.orEmpty().lowercase()
+        val name = (uri.lastPathSegment ?: uri.toString()).lowercase()
+        val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull().orEmpty().lowercase()
         return when {
-            name.endsWith(".png") -> "png"
-            name.endsWith(".webp") -> "webp"
+            mime.contains("png") || name.endsWith(".png") -> "png"
+            mime.contains("webp") || name.endsWith(".webp") -> "webp"
+            mime.contains("gif") || name.endsWith(".gif") -> "gif"
             else -> "jpg"
         }
     }

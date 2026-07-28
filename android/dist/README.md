@@ -2,7 +2,9 @@
 
 | File | Purpose |
 |------|---------|
-| `nde-inspection-1.1.2-release.aab` | Signed Play App Bundle (`versionCode` 4, `targetSdk` 35) |
+| `nde-inspection-1.1.3-release.aab` | Signed Play App Bundle (`versionCode` 5, `targetSdk` 35) |
+
+Fixes: checklist photo embedding + required province selection.
 
 Download:
-https://github.com/ViperFSJ/BRENDATAENTRY/raw/cursor/android-app-66fe/android/dist/nde-inspection-1.1.2-release.aab
+https://github.com/ViperFSJ/BRENDATAENTRY/raw/cursor/android-app-66fe/android/dist/nde-inspection-1.1.3-release.aab

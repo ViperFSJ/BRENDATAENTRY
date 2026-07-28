@@ -201,21 +201,25 @@ private fun ClassDropdown(options: List<String>, selected: String, onSelect: (St
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FieldsStep(state: UiState, vm: IntakeViewModel) {
+    val provinces = listOf(
+        "AB", "BC", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL", "YT", "NT", "NU",
+    )
     val labels = mapOf(
         "client_name" to "Client name",
         "owner_name" to "Owner name",
+        "job_no" to "Job number",
+        "location" to "Location",
+        "province" to "Province (required)",
+        "lsd" to "LSD",
         "client_unit_id" to "Client unit ID",
         "serial_no" to "Serial number",
         "manufacturer" to "Manufacturer",
         "model" to "Model",
         "equip_type" to "Equipment type",
         "capacity" to "Capacity",
-        "job_no" to "Job number",
-        "location" to "Location",
-        "province" to "Province (2 letters)",
-        "lsd" to "LSD",
         "client_reference" to "Client reference (blank = unit ID)",
         "basket_max_height" to "Basket max height",
         "basket_max_reach" to "Basket max reach",
@@ -223,25 +227,69 @@ private fun FieldsStep(state: UiState, vm: IntakeViewModel) {
         "basket_width" to "Basket width",
         "basket_height" to "Basket height",
     )
+    val fieldOrder = state.fieldValues.keys.toList()
     Column {
         Text("Review fields", style = MaterialTheme.typography.headlineSmall)
         if (state.message.isNotBlank()) {
             Text(state.message, modifier = Modifier.padding(vertical = 8.dp))
         }
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(state.fieldValues.keys.toList()) { key ->
-                OutlinedTextField(
-                    value = state.fieldValues[key].orEmpty(),
-                    onValueChange = { vm.updateField(key, it) },
-                    label = { Text(labels[key] ?: key) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
+            items(fieldOrder) { key ->
+                if (key == "province") {
+                    ProvinceDropdown(
+                        options = provinces,
+                        selected = state.fieldValues["province"].orEmpty(),
+                        onSelect = { vm.updateField("province", it) },
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = state.fieldValues[key].orEmpty(),
+                        onValueChange = { vm.updateField(key, it) },
+                        label = { Text(labels[key] ?: key) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = vm::continueToChecklist, modifier = Modifier.fillMaxWidth()) {
             Text("Continue to checklist")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProvinceDropdown(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Province (required)") },
+            placeholder = { Text("Select province") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            isError = selected.isBlank(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { code ->
+                DropdownMenuItem(
+                    text = { Text(code) },
+                    onClick = {
+                        onSelect(code)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }
@@ -331,6 +379,12 @@ private fun DoneStep(state: UiState, vm: IntakeViewModel) {
             Text("RAEQ: ${result.raeq}")
             Text("Decision: ${result.decision}")
             Text("Photos embedded: ${result.insertedPhotoCount}")
+            if (state.photoUris.isNotEmpty() && result.insertedPhotoCount == 0) {
+                Text(
+                    "Warning: photos were selected but none were embedded in the checklist. Share the checklist and confirm figures, or re-run with Take photo / From device.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Text("Checklist:\n${result.checklistPath}")
             Text("Certificate:\n${result.certificatePath}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

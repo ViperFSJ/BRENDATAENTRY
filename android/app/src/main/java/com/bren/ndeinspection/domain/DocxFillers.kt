@@ -256,17 +256,24 @@ object DocxFillers {
             val labels = containers.map { normalizeLabel(DocxXml.cellText(it)) }
             for (index in labels.indices) {
                 val label = labels[index]
+                // Template uses "LSD:" as the row label; also accept plain "lsd".
+                val isLsdRow = label == "lsd" || label == "lsd:" || label.startsWith("lsd")
+                if (isLsdRow) {
+                    val provinceValue = fields["province"]?.trim().orEmpty()
+                    val lsdValue = fields["lsd"]?.trim().orEmpty()
+                    // Match desktop Python: province in next cell, LSD value in the one after.
+                    if (provinceValue.isNotEmpty() && index + 1 < containers.size) {
+                        DocxXml.setContainerText(containers[index + 1], provinceValue)
+                    }
+                    if (lsdValue.isNotEmpty() && index + 2 < containers.size) {
+                        DocxXml.setContainerText(containers[index + 2], lsdValue)
+                    }
+                    continue
+                }
+
                 val fieldKey = labelsToFields[label] ?: continue
                 val rawValue = fields[fieldKey]?.trim().orEmpty()
                 if (rawValue.isBlank()) continue
-
-                if (fieldKey == "lsd" && !fields["province"].isNullOrBlank() &&
-                    index + 2 < containers.size
-                ) {
-                    DocxXml.setContainerText(containers[index + 1], fields.getValue("province").trim())
-                    DocxXml.setContainerText(containers[index + 2], rawValue)
-                    continue
-                }
                 if (index + 1 >= containers.size) continue
                 val target = containers[index + 1]
                 val value = if (fieldKey == "inspection_date" ||

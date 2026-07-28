@@ -79,14 +79,18 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
     fun setExpiryDate(v: String) = _state.update { it.copy(expiryDate = v) }
     fun setForceNew(v: Boolean) = _state.update { it.copy(forceNewEquipment = v) }
 
-    fun addPhotos(uris: List<Uri>) = _state.update {
-        it.copy(photoUris = (it.photoUris + uris).distinct())
+    fun addPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val persisted = repo.persistPhotos(uris)
+        _state.update {
+            it.copy(photoUris = (it.photoUris + persisted.ifEmpty { uris }).distinct())
+        }
     }
 
     fun clearPhotos() = _state.update { it.copy(photoUris = emptyList()) }
 
     fun updateField(key: String, value: String) = _state.update {
-        it.copy(fieldValues = it.fieldValues + (key to value))
+        it.copy(fieldValues = it.fieldValues + (key to value), message = "")
     }
 
     fun setChecklistResult(slug: String, result: String) = _state.update {
@@ -127,24 +131,27 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 ExtractionResult()
             }
+            // Put province/job/location near the top so they aren't missed.
             val defaults = linkedMapOf(
                 "client_name" to "",
                 "owner_name" to "",
+                "job_no" to "",
+                "location" to "",
+                "province" to "",
+                "lsd" to "",
                 "client_unit_id" to "",
                 "serial_no" to "",
                 "manufacturer" to "",
                 "model" to "",
                 "equip_type" to st.className,
                 "capacity" to "",
-                "job_no" to "",
-                "location" to "",
-                "province" to "",
-                "lsd" to "",
                 "client_reference" to "",
             )
             val merged = defaults.mapValues { (k, def) ->
                 extraction.fields[k]?.value?.takeIf { it.isNotBlank() } ?: def
             }.toMutableMap()
+            // Never auto-fill province from OCR — always confirm inspection province.
+            merged["province"] = ""
             if (repo.needsBasketFields(st.className)) {
                 listOf(
                     "basket_max_height",
@@ -169,9 +176,9 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
                         ?: "Certification recommended",
                     step = WizardStep.FIELDS,
                     message = if (extraction.fields.isEmpty()) {
-                        "No OCR fields found — enter values manually."
+                        "No OCR fields found — enter values manually. Province is required."
                     } else {
-                        "OCR filled ${extraction.fields.size} field(s). Review and continue."
+                        "OCR filled ${extraction.fields.size} field(s). Confirm province (required), then continue."
                     },
                 )
             }
@@ -179,7 +186,14 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun continueToChecklist() {
-        _state.update { it.copy(step = WizardStep.CHECKLIST) }
+        val province = _state.value.fieldValues["province"].orEmpty().trim()
+        if (province.length != 2) {
+            _state.update {
+                it.copy(message = "Select the 2-letter province where the inspection is taking place (e.g. AB).")
+            }
+            return
+        }
+        _state.update { it.copy(step = WizardStep.CHECKLIST, message = "") }
     }
 
     fun runInspection() {
