@@ -51,3 +51,8 @@ android/*.iml
 android/.idea/
 *.apk
 *.aab
+
+# Android signing secrets (do not commit)
+android/keystore.properties
+android/*.jks
+android/*.keystore

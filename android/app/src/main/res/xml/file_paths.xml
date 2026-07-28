@@ -2,4 +2,5 @@
 <paths>
     <files-path name="outputs" path="outputs/" />
     <cache-path name="cache" path="." />
+    <cache-path name="camera_captures" path="camera_captures/" />
 </paths>

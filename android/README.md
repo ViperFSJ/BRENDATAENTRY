@@ -4,7 +4,8 @@ Single-package offline Android client for the same NDE / RAEQ intake workflow as
 
 ## What you get
 
-- One installable APK (no separate Tesseract / Python install)
+- One installable APK / Play App Bundle (no separate Tesseract / Python install)
+- **In-app camera** capture **and** gallery / device photo pick
 - On-device OCR via **ML Kit Text Recognition**
 - All **16 equipment class** Word templates bundled in the app
 - Local **Room / SQLite** RAEQ pool + equipment history
@@ -26,19 +27,26 @@ APK output:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install on a device/emulator:
+### Signed Play release (internal testing)
+
+See **[docs/PLAY_INTERNAL_TESTING.md](docs/PLAY_INTERNAL_TESTING.md)**.
+
+With `keystore.properties` + `upload-keystore.jks` in `android/`:
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:bundleRelease :app:assembleRelease
 ```
+
+- AAB: `app/build/outputs/bundle/release/app-release.aab` ← upload to Play Internal testing
+- APK: `app/build/outputs/apk/release/app-release.apk`
 
 ## Client trial (phone/tablet)
 
-1. Install the APK (sideload or internal distribution).
+1. Install via Play Internal testing (or sideload the release APK).
 2. Open **NDE Inspection**.
 3. Pick **equipment class** from the dropdown.
 4. Set inspection / expiry dates.
-5. Optionally **Add photos** of the data plate / unit ID (JPG/PNG).
+5. Add photos with **Take photo** (camera) and/or **From device** (gallery).
 6. Tap **Continue** — OCR pre-fills what it can; edit any field.
 7. Set checklist OK / RR / N/A (or Mark all OK).
 8. Tap **Generate documents**, then **Share checklist / certificate**.
@@ -55,4 +63,4 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Package id
 
-`com.bren.ndeinspection`
+`com.bren.ndeinspection` (versionName `1.1.0`, versionCode `2`)

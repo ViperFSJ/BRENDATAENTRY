@@ -1,6 +1,8 @@
 package com.bren.ndeinspection.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
@@ -48,6 +51,16 @@ import java.io.File
 @Composable
 fun IntakeApp(vm: IntakeViewModel = viewModel()) {
     val state by vm.state.collectAsState()
+    var showCamera by remember { mutableStateOf(false) }
+
+    if (showCamera) {
+        CameraCaptureScreen(
+            onPhotoCaptured = { uri -> vm.addPhotos(listOf(uri)) },
+            onClose = { showCamera = false },
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("NDE Inspection") })
@@ -60,7 +73,11 @@ fun IntakeApp(vm: IntakeViewModel = viewModel()) {
                 .padding(16.dp)
         ) {
             when (state.step) {
-                WizardStep.SETUP -> SetupStep(state, vm)
+                WizardStep.SETUP -> SetupStep(
+                    state = state,
+                    vm = vm,
+                    onOpenCamera = { showCamera = true },
+                )
                 WizardStep.FIELDS -> FieldsStep(state, vm)
                 WizardStep.CHECKLIST -> ChecklistStep(state, vm)
                 WizardStep.CONFIRM_EXISTING -> ConfirmExistingStep(state, vm)
@@ -74,10 +91,36 @@ fun IntakeApp(vm: IntakeViewModel = viewModel()) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SetupStep(state: UiState, vm: IntakeViewModel) {
+private fun SetupStep(
+    state: UiState,
+    vm: IntakeViewModel,
+    onOpenCamera: () -> Unit,
+) {
+    val context = LocalContext.current
+    var cameraDenied by remember { mutableStateOf(false) }
+
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris -> if (uris.isNotEmpty()) vm.addPhotos(uris) }
+
+    val requestCameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            cameraDenied = false
+            onOpenCamera()
+        } else {
+            cameraDenied = true
+        }
+    }
+
+    fun openCameraWithPermission() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) onOpenCamera() else requestCameraPermission.launch(Manifest.permission.CAMERA)
+    }
 
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Start inspection", style = MaterialTheme.typography.headlineSmall)
@@ -105,10 +148,17 @@ private fun SetupStep(state: UiState, vm: IntakeViewModel) {
 
         Text("Photos: ${state.photoUris.size} selected")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { pickImages.launch("image/*") }) { Text("Add photos") }
+            Button(onClick = { openCameraWithPermission() }) { Text("Take photo") }
+            OutlinedButton(onClick = { pickImages.launch("image/*") }) { Text("From device") }
             OutlinedButton(onClick = vm::clearPhotos, enabled = state.photoUris.isNotEmpty()) {
                 Text("Clear")
             }
+        }
+        if (cameraDenied) {
+            Text(
+                "Camera permission denied. You can still use From device, or enable Camera in system settings.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
 
         if (state.message.isNotBlank()) Text(state.message)
