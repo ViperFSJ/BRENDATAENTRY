@@ -342,7 +342,8 @@ object DocxFillers {
     private fun replaceFieldTokens(document: Document, fields: Map<String, String>) {
         if (fields.isEmpty()) return
         val normalizedFields = fields.entries.associate { normalizeFieldKey(it.key) to it.value }
-        val tokenPattern = Regex("""\{\{\s*([A-Za-z0-9_. -]+)\s*}}""")
+        // Use [{]/[}] — Android ICU rejects \{ / \} escapes ("Syntax error in regexp pattern").
+        val tokenPattern = Regex("""[{][{]\s*([A-Za-z0-9_.\- ]+)\s*[}][}]""")
         val textNodes = textElements(document.documentElement)
         for (textNode in textNodes) {
             var text = textNode.textContent.orEmpty()
