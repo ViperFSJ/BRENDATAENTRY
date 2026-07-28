@@ -198,7 +198,7 @@ object DocxXml {
             .toByteArray(Charsets.UTF_8)
     }
 
-    private fun descendantElements(element: Element, wantedLocalName: String): List<Element> {
+    fun descendantElements(element: Element, wantedLocalName: String): List<Element> {
         val matches = mutableListOf<Element>()
         if (localName(element) == wantedLocalName) matches += element
         val descendants = element.getElementsByTagName("*")

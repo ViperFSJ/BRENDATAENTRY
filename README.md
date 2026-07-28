@@ -18,6 +18,12 @@ Optional: `--force-new-equipment` for repeated tests without “same equipment?�
 
 **Full step-by-step for clients:** [docs/desktop_ui_trial_guide.md](docs/desktop_ui_trial_guide.md)
 
+## Android app (single APK)
+
+Offline phone/tablet client with on-device OCR (ML Kit), bundled templates, and Word checklist/certificate output.
+
+See **[android/README.md](android/README.md)** — build with `./gradlew :app:assembleDebug` from `android/`.
+
 **Live demo before client/class are known:** [docs/live_demo_prep.md](docs/live_demo_prep.md) — use `samples/live_trial_manual_extraction.json` for all-manual prompts.
 
 **What to say during a client demo:** [docs/live_demo_narration_script.md](docs/live_demo_narration_script.md)

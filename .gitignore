@@ -42,3 +42,12 @@ __test_*.docx
 /*.pdf
 /*.xlsx
 /*.png
+
+# Android
+android/.gradle/
+android/**/build/
+android/local.properties
+android/*.iml
+android/.idea/
+*.apk
+*.aab
