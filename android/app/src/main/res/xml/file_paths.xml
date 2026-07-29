@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="outputs" path="outputs/" />
+    <files-path name="persisted_photos" path="persisted_photos/" />
+    <cache-path name="cache" path="." />
+    <cache-path name="camera_captures" path="camera_captures/" />
+</paths>

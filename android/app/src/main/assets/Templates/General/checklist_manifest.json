@@ -1,0 +1,30 @@
+{
+  "description": "Row-ordered labels for General checklist when Word cells are blank. Edit to match your field wording; keep length equal to table row count.",
+  "items": [
+    "General line 01",
+    "General line 02",
+    "General line 03",
+    "General line 04",
+    "General line 05",
+    "General line 06",
+    "General line 07",
+    "General line 08",
+    "General line 09",
+    "General line 10",
+    "General line 11",
+    "General line 12",
+    "General line 13",
+    "General line 14",
+    "General line 15",
+    "General line 16",
+    "General line 17",
+    "General line 18",
+    "General line 19",
+    "General line 20",
+    "General line 21",
+    "General line 22",
+    "General line 23",
+    "General line 24",
+    "General line 25"
+  ]
+}
